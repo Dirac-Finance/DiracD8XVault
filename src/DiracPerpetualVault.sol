@@ -1,19 +1,26 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.10;
 
-import "../lib/openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol";
-import "../lib/openzeppelin-contracts-upgradeable/contracts/utils/PausableUpgradeable.sol";
-import "../lib/openzeppelin-contracts-upgradeable/contracts/utils/ReentrancyGuardUpgradeable.sol";
-import "../lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import "../lib/openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol";
+import "./interface/CompositeToken.sol";
+import "./interface/IAccountInfo.sol";
+import "./interface/LiquidityPoolData.sol";
+import "openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/contracts/utils/PausableUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/contracts/utils/ReentrancyGuardUpgradeable.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol";
 import {ERC4626Upgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/ERC4626Upgradeable.sol";
+import {IClientOrder} from "./interface/IClientOrder.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {ILimitOrderBook} from "./interface/ILimitOrderBook.sol";
+import {IPerpetualProxy} from "./interface/IPerpetualProxy.sol";
 import {ISwapRouter} from "../lib/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import {Initializable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {Ownable2StepUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {TransferHelper} from "../lib/v3-periphery/contracts/libraries/TransferHelper.sol";
-import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {IClientOrder} from "./interface/IClientOrder.sol";
-import {ILimitOrderBook} from "./interface/ILimitOrderBook.sol";
+import "openzeppelin-contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+
+import "./library/LOperation.sol";
 /**
  * @dev Custom errors.
  */
@@ -27,7 +34,7 @@ import {ILimitOrderBook} from "./interface/ILimitOrderBook.sol";
     error ZeroAddress();
     error ZeroAmount();
 
-contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControlUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, IERC721Receiver{
+contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControlUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable{
 
     // The trade cycle status
     enum TradeCycleStatus {
@@ -68,7 +75,10 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
     event TradeCycleStarted(uint256 indexed tradeCycleId, uint256 honeyDeposit, uint256 startedAt, uint256 expiresAt);
     event TradeCyclePendingEnd(uint256 indexed tradeCycleId);
     event TradeCycleEnded(uint256 indexed tradeCycleId, uint256 endedAt);
-    event PostedOrder( uint24 indexed perpetualId, uint128 amount, uint32 flags, uint16 leverageTDR, int128 fLimitPrice);
+    event PostedOrder( uint24 indexed perpetualId, int128 amount, uint32 flags, uint16 leverageTDR, int128 fLimitPrice);
+    event PerpetualAdded(uint24 perpetualId, address lobAddr, address mgnTknAddrOfPool);
+    event MarginTokenSent(uint24 perpetualId, address to, uint256 amountDecN);
+
 
     mapping(address => bool) public whitelisted;
     uint256 public maxUserDeposit;
@@ -80,10 +90,12 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
     // Assets to use in the vault
 
     IERC20 private honey;
-
+    mapping(uint24 => address) public orderBookAddresses;
+    // each perpetual is in a pool. Perpetuals in a pool share the margin token
+    mapping(uint24 => address) public mgnTknAddrOfPool;
 
     // perpetual vault address
-    address private perpetualVault;
+    address private perpetualProxy;
     address private orderBookAddressBTC;
     address private orderBookAddressGold;
 
@@ -205,13 +217,12 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
         }
     }
 
-
     function initialize(
         IERC20 _honey,
         address _orderBookAddressBTC,
         address _orderBookAddressGold,
         address _kodiakSwapRouter,
-        address _perpetualVault,
+        address _perpetualProxy,
         uint24 _perpetualIdBTC,
         uint24 _perpetualIdGold,
         uint256 _maxUserDeposit
@@ -224,11 +235,11 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(OPERATOR_ROLE, msg.sender);
 
-        if (address(_honey) == address(0) ||  _perpetualVault == address(0) ||  _kodiakSwapRouter == address(0) ||  _orderBookAddressGold == address(0) ||  _orderBookAddressBTC == address(0)) {
+        if (address(_honey) == address(0) ||  _perpetualProxy == address(0) ||  _kodiakSwapRouter == address(0) ||  _orderBookAddressGold == address(0) ||  _orderBookAddressBTC == address(0)) {
             revert ZeroAddress();
         }
         honey = _honey;
-        perpetualVault = _perpetualVault;
+        perpetualProxy = _perpetualProxy;
         maxUserDeposit = _maxUserDeposit;
         orderBookAddressBTC = _orderBookAddressBTC;
         orderBookAddressGold = _orderBookAddressGold;
@@ -348,6 +359,7 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
      * @param _owner The owner of the shares being redeemed.
      * @return assets The amount of assets received.
      */
+
     function redeem(
         uint256 _shares,
         address _receiver,
@@ -394,16 +406,87 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
         return convertToAssets(totalSupply());
     }
 
+    function addPerpetual( bool isBTC) external onlyRole(OPERATOR_ROLE) {
+        // set order book address
+
+        address lobAddr;
+        uint24 _iPerpetualId;
+        if(isBTC){
+            _iPerpetualId = perpetualIdBTC;
+            lobAddr = IPerpetualProxy(perpetualProxy).getOrderBookAddress(
+                perpetualIdBTC
+            );
+        }else{
+            _iPerpetualId=perpetualIdGold;
+            lobAddr = IPerpetualProxy(perpetualProxy).getOrderBookAddress(
+                perpetualIdGold
+            );
+        }
+        orderBookAddresses[_iPerpetualId] = lobAddr;
+        // register margin token
+        uint8 poolId = uint8(_iPerpetualId / 100_000);
+        if (mgnTknAddrOfPool[poolId] == address(0)) {
+            // set margin token address for pool
+            ILiquidityPoolData.LiquidityPoolData memory lp = IPerpetualProxy(
+                perpetualProxy
+            ).getLiquidityPool(poolId);
+            mgnTknAddrOfPool[poolId] = lp.marginTokenAddress;
+        }
+        emit PerpetualAdded(_iPerpetualId, lobAddr, mgnTknAddrOfPool[poolId]);
+    }
+
+
+    function approveAmountForPerpetualMgnTkn(uint256 _amount, uint24 _iPerpetualId) external onlyRole(OPERATOR_ROLE){
+        uint8 poolId = uint8(_iPerpetualId / 100_000);
+        address mgnTkn = mgnTknAddrOfPool[poolId];
+        require(mgnTkn != address(0), "set ob addrs");
+        IERC20(mgnTkn).approve(perpetualProxy, _amount);
+    }
+
+    /**
+     * Approve a registered token to be used in a composite token pool.
+     * @param _amount spend amount
+     * @param _iPerpetualId perpetual Id
+     * @param _spendToken Token to spend
+     */
+    function approveCompositeToken(
+        uint256 _amount,
+        uint24 _iPerpetualId,
+        address _spendToken
+    ) external onlyRole(OPERATOR_ROLE) {
+        uint8 poolId = uint8(_iPerpetualId / 100_000);
+        address compositeToken = mgnTknAddrOfPool[poolId];
+        require(compositeToken != address(0), "no composite");
+        require(_spendToken != address(0), "no token");
+        address registeredToken = CompositeToken(compositeToken).registeredToken(address(this));
+        if (registeredToken == address(0)) {
+            // not yet registered
+            CompositeToken(compositeToken).registerAccount(_spendToken);
+        } else {
+            require(registeredToken == _spendToken, "wrong token");
+        }
+        IERC20(_spendToken).approve(compositeToken, _amount);
+    }
+
+
     function postOrder(
         int128 _amount,
         uint32 _flags,
         uint16 _leverageTDR,
         int128 _fLimitPrice,
         bool _isLong
-    ) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+    ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant onlyTradeCycle(TradeCycleStatus.OPEN) {
             // This is for bit coin order
+            uint24 _iPerpetualId;
             IClientOrder.ClientOrder[] memory order = new IClientOrder.ClientOrder[](1);
-            order[0].iPerpetualId = perpetualIdBTC;
+            if(_isLong){
+                _iPerpetualId = perpetualIdBTC;
+            } else {
+                _iPerpetualId = perpetualIdGold;
+            }
+            address orderBookAddr = orderBookAddresses[_iPerpetualId];
+            require(orderBookAddr != address(0), "order book unknown");
+            order[0].iPerpetualId = _iPerpetualId;
             order[0].flags=_flags;
             order[0].traderAddr= address(this);
             order[0].fAmount=_amount;
@@ -427,13 +510,6 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
             } catch {
                 revert OperationFailed();
             }
-    }
-    function executeOrder(
-        uint256 _perpetualId,
-        uint256 _amount,
-        bool _isLong
-    ) external onlyRole(OPERATOR_ROLE) whenNotPaused {
-
     }
 
 
@@ -471,8 +547,54 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
         ISwapRouter(kodiakSwapRouter).exactInputSingle(swapParams);
     }
 
+    /**
+    * Return margin account information in decimal 18 format
+    * @param _iPerpetualId id of perpetual
+     */
+    function getMarginAccount(
+        uint24 _iPerpetualId
+    ) external view onlyRole(DEFAULT_ADMIN_ROLE) returns  (IAccountInfo.D18MarginAccount memory) {
+        IAccountInfo.MarginAccount memory acc = IPerpetualProxy(perpetualProxy).getMarginAccount(
+            _iPerpetualId,
+            address(this)
+        );
+        IAccountInfo.D18MarginAccount memory accD18;
+        accD18.lockedInValueQCD18 = LOperation.toDec18(acc.fLockedInValueQC); // unrealized value locked-in when trade occmurs: price * position size
+        accD18.cashCCD18 = LOperation.toDec18(acc.fCashCC); // cash in collateral currency (base, quote, or quanto)
+        accD18.positionSizeBCD18 = LOperation.toDec18(acc.fPositionBC); // position in base currency (e.g., 1 BTC for BTCUSD)
+        return accD18;
+    }
+
+
+    /**
+   * Withdraw margin token balance linked to a given perpetual Id
+   * @param _iPerpetualId Perpetual id
+     */
+    function transferMarginCollateralTo(uint24 _iPerpetualId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint8 poolId = uint8(_iPerpetualId / 100_000);
+        address mgnTknAddr = mgnTknAddrOfPool[poolId];
+        IERC20Upgradeable marginToken = IERC20Upgradeable(mgnTknAddr);
+        uint256 balance = marginToken.balanceOf(address(this));
+        // transfer the margin token to the user
+        marginToken.safeTransfer(msg.sender, balance);
+        emit MarginTokenSent(_iPerpetualId, msg.sender, balance);
+    }
+
+    /**
+     * Withdraw ERC20 tokens stored in this contract
+     * Required with trading in a pool with a composite token
+     * @param _tokenAddr Token address
+     */
+    function transferTokensTo(address _tokenAddr) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        IERC20Upgradeable token = IERC20Upgradeable(_tokenAddr);
+        uint256 balance = token.balanceOf(address(this));
+        // transfer the margin token to the user
+        token.safeTransfer(msg.sender, balance);
+        emit MarginTokenSent(0, msg.sender, balance);
+    }
+
     /** @dev See {IERC721Receiver-onERC721Received}. */
-    function onERC721Received(
+    /*function onERC721Received(
         address,
         address,
         uint256,
@@ -480,5 +602,5 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
     ) public virtual override returns (bytes4) {
         return this.onERC721Received.selector;
     }
-
+    */
 }
