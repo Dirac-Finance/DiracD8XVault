@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.10;
 
+import "./IAccountInfo.sol";
 import "./LiquidityPoolData.sol";
 
 interface IPerpetualProxy {
@@ -18,4 +19,9 @@ interface IPerpetualProxy {
     function getLiquidityPool(
         uint8 _poolId
     ) external view returns (ILiquidityPoolData.LiquidityPoolData memory);
+
+    function getMarginAccount(
+        uint24 _perpetualId,
+        address _traderAddress
+    ) external view returns (IAccountInfo.MarginAccount memory);
 }

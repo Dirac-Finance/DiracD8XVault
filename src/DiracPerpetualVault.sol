@@ -11,15 +11,14 @@ import "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import "openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol";
 import {ERC4626Upgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import {IClientOrder} from "./interface/IClientOrder.sol";
-import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {ILimitOrderBook} from "./interface/ILimitOrderBook.sol";
 import {IPerpetualProxy} from "./interface/IPerpetualProxy.sol";
 import {ISwapRouter} from "../lib/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import {Initializable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {Ownable2StepUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {TransferHelper} from "../lib/v3-periphery/contracts/libraries/TransferHelper.sol";
-import "openzeppelin-contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import  {TransferHelper} from "../lib/v3-periphery/contracts/libraries/TransferHelper.sol";
 import "./library/LOperation.sol";
 /**
  * @dev Custom errors.
@@ -71,7 +70,6 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
     // events that occurred
     event TradeCycleCreated(uint256 indexed cycleId, TradeCycleStatus status, uint256 startTime, uint256 endTime
     );
-
     event TradeCycleStarted(uint256 indexed tradeCycleId, uint256 honeyDeposit, uint256 startedAt, uint256 expiresAt);
     event TradeCyclePendingEnd(uint256 indexed tradeCycleId);
     event TradeCycleEnded(uint256 indexed tradeCycleId, uint256 endedAt);
@@ -408,7 +406,6 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
 
     function addPerpetual( bool isBTC) external onlyRole(OPERATOR_ROLE) {
         // set order book address
-
         address lobAddr;
         uint24 _iPerpetualId;
         if(isBTC){
@@ -436,7 +433,14 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
     }
 
 
-    function approveAmountForPerpetualMgnTkn(uint256 _amount, uint24 _iPerpetualId) external onlyRole(OPERATOR_ROLE){
+    function approveAmountForPerpetualMgnTkn(uint256 _amount, bool isBTC) external onlyRole(OPERATOR_ROLE){
+
+        uint24 _iPerpetualId;
+        if(isBTC){
+            _iPerpetualId = perpetualIdBTC;
+        }else{
+            _iPerpetualId = perpetualIdGold;
+        }
         uint8 poolId = uint8(_iPerpetualId / 100_000);
         address mgnTkn = mgnTknAddrOfPool[poolId];
         require(mgnTkn != address(0), "set ob addrs");
@@ -549,11 +553,17 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
 
     /**
     * Return margin account information in decimal 18 format
-    * @param _iPerpetualId id of perpetual
+    * @param isBTC whether the perpetual is BTC or Gold
      */
     function getMarginAccount(
-        uint24 _iPerpetualId
+        bool isBTC
     ) external view onlyRole(DEFAULT_ADMIN_ROLE) returns  (IAccountInfo.D18MarginAccount memory) {
+        uint24 _iPerpetualId;
+        if(isBTC){
+            _iPerpetualId = perpetualIdBTC;
+        }else{
+            _iPerpetualId = perpetualIdGold;
+        }
         IAccountInfo.MarginAccount memory acc = IPerpetualProxy(perpetualProxy).getMarginAccount(
             _iPerpetualId,
             address(this)
@@ -568,15 +578,27 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
 
     /**
    * Withdraw margin token balance linked to a given perpetual Id
-   * @param _iPerpetualId Perpetual id
+   * @param isBTC whether the perpetual is BTC or Gold
      */
-    function transferMarginCollateralTo(uint24 _iPerpetualId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function transferMarginCollateralTo(bool isBTC) external onlyRole(DEFAULT_ADMIN_ROLE) {
+
+        uint24 _iPerpetualId;
+        if(isBTC){
+            _iPerpetualId = perpetualIdBTC;
+        }else{
+            _iPerpetualId = perpetualIdGold;
+        }
         uint8 poolId = uint8(_iPerpetualId / 100_000);
         address mgnTknAddr = mgnTknAddrOfPool[poolId];
-        IERC20Upgradeable marginToken = IERC20Upgradeable(mgnTknAddr);
+        IERC20 marginToken = IERC20(mgnTknAddr);
         uint256 balance = marginToken.balanceOf(address(this));
         // transfer the margin token to the user
-        marginToken.safeTransfer(msg.sender, balance);
+        TransferHelper.safeTransfer(
+            mgnTknAddr,
+            msg.sender,
+            balance
+        );
+        //marginToken.safeTransfer(msg.sender, balance);
         emit MarginTokenSent(_iPerpetualId, msg.sender, balance);
     }
 
@@ -586,10 +608,16 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
      * @param _tokenAddr Token address
      */
     function transferTokensTo(address _tokenAddr) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        IERC20Upgradeable token = IERC20Upgradeable(_tokenAddr);
+        IERC20 token = IERC20(_tokenAddr);
         uint256 balance = token.balanceOf(address(this));
         // transfer the margin token to the user
-        token.safeTransfer(msg.sender, balance);
+        TransferHelper.safeTransfer(
+            _tokenAddr,
+            msg.sender,
+            balance
+        );
+        //token.safeTransfer(msg.sender, balance);
+
         emit MarginTokenSent(0, msg.sender, balance);
     }
 
