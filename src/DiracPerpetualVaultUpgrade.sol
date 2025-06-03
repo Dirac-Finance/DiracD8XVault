@@ -94,7 +94,7 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
     // each perpetual is in a pool. Perpetuals in a pool share the margin token
     mapping(uint24 => address) public mgnTknAddrOfPool;
 
-    // perpetual vault address
+    // D8X addresses for smart contract interaction  
     address private perpetualProxy;
     address private orderBookAddressBTC;
     address private orderBookAddressGold;
@@ -106,7 +106,7 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
     uint24 private   perpetualIdBTC;
     uint24 private   perpetualIdGold;
 
-    // Kodiak swap router address
+    // Kodiak swap router address (in case we need to accept other currencies as deposits to be swapped to HONEY and sent to D8X/MadHoney)
     address private  kodiakSwapRouter;
     // operator role for operations like deposits, withdrawals, and trades
     bytes32 private constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
