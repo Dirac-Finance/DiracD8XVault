@@ -227,7 +227,7 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         uint24 _perpetualIdGold,
         uint256 _maxUserDeposit
     ) external initializer {
-        __ERC20_init("Dirac Perpetual Vaults", "DPV");
+        __ERC20_init("Dirac D8X Perpetual Vaults", "DDPV");
         __ERC4626_init(_honey);
         __AccessControl_init();
         __Pausable_init();
