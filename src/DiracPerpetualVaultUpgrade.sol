@@ -431,7 +431,7 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         return convertToAssets(totalSupply());
     }
 
-    function addPerpetual( bool isBTC) external onlyRole(OPERATOR_ROLE) {
+    function addPerpetual(bool isBTC) external onlyRole(OPERATOR_ROLE) {
         // set order book address
         address lobAddr;
         uint24 _iPerpetualId;
