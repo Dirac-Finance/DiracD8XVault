@@ -434,7 +434,6 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
 
 
     function approveAmountForPerpetualMgnTkn(uint256 _amount, bool isBTC) external onlyRole(OPERATOR_ROLE){
-
         uint24 _iPerpetualId;
         if(isBTC){
             _iPerpetualId = perpetualIdBTC;
@@ -502,14 +501,25 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
             order[0].callbackTarget = address(this);
             bytes[] memory sig = new bytes[](1);
             try ILimitOrderBook(orderBookAddressBTC).postOrders(order , sig){
-                tradeCycles[currentTradeCycleId].btcPositions.push(
-                    btcPositionData({
-                        amount: _amount,
-                        entryPrice: uint128(_fLimitPrice),
-                        executedAt: block.timestamp,
-                        postedAt: block.timestamp
-                    })
-                );
+                if(_isLong) {
+                    tradeCycles[currentTradeCycleId].goldPositions.push(
+                        goldPositionData({
+                            amount: _amount,
+                            entryPrice: uint128(_fLimitPrice),
+                            executedAt: block.timestamp,
+                            postedAt: block.timestamp
+                        })
+                    );
+                } else {
+                    tradeCycles[currentTradeCycleId].btcPositions.push(
+                        btcPositionData({
+                            amount: _amount,
+                            entryPrice: uint128(_fLimitPrice),
+                            executedAt: block.timestamp,
+                            postedAt: block.timestamp
+                        })
+                    );
+                }
                 emit PostedOrder(perpetualIdBTC, _amount, _flags, _leverageTDR, _fLimitPrice);
             } catch {
                 revert OperationFailed();
@@ -581,7 +591,6 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
    * @param isBTC whether the perpetual is BTC or Gold
      */
     function transferMarginCollateralTo(bool isBTC) external onlyRole(DEFAULT_ADMIN_ROLE) {
-
         uint24 _iPerpetualId;
         if(isBTC){
             _iPerpetualId = perpetualIdBTC;
@@ -595,7 +604,7 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
         // transfer the margin token to the user
         TransferHelper.safeTransfer(
             mgnTknAddr,
-            msg.sender,
+            address(this),
             balance
         );
         //marginToken.safeTransfer(msg.sender, balance);
@@ -613,7 +622,7 @@ contract DiracPerpetualVault is Initializable, ERC4626Upgradeable, AccessControl
         // transfer the margin token to the user
         TransferHelper.safeTransfer(
             _tokenAddr,
-            msg.sender,
+            address(this),
             balance
         );
         //token.safeTransfer(msg.sender, balance);

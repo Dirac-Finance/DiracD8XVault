@@ -17,7 +17,7 @@ contract DeployDiracPerpetualVault is Script{
         address  vault =0x42c79B19d9266c80e970383Bac68aa0a5E351C3E;
         //deploy();
        // startTradeCycle(vault, 84000);
-        postOrder(vault, 1 ether,  0x04000000, 1000, 104155.80 ether, true);
+        //postOrder(vault, 1 ether,  0x04000000, 1000, 104155.80 ether, true);
     }
 
     function setUp() external {
@@ -62,7 +62,16 @@ contract DeployDiracPerpetualVault is Script{
 
         vm.stopBroadcast();
     }
-
+    function upgrade(address proxyAddress) public {
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        Upgrades.upgradeProxy(
+            proxyAddress,
+            "DiracPerpetualVault.sol",
+            ""
+        );
+        vm.stopBroadcast();
+    }
     function transferOwnership(address vault, address newOwner) public {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
