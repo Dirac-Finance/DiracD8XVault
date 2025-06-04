@@ -104,4 +104,13 @@ Action Items for this meeting:
 - Send GitHub handles to the team. @Caspar Sauter
 
 
+I submitted the limit order and the PerpetualLimitOrderCreated was emitted.
+
+I checked the Limit order contract for the btc/usd perpetual(which has as address 0x901cA2D9a243aeeDB0e91495AfE27f97864F81F7)
+,but in the transactions I do not see my transaction.
+
+I have a few questions regarding the order execution:
+
+Why I'm not seeing the order I post in the limit order contract transaction?
+How does the order execution work? Is it automatic or do we need to write a function to execute it manually?
 

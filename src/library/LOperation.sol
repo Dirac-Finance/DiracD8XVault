@@ -3,11 +3,11 @@ pragma solidity ^0.8.10;
 
 library LOperation {
 
-    int256 private constant DECIMALS = 10 ** 18;
-    int128 private constant ONE_64x64 = 2 ** 64;
-    int128 private constant MIN_64x64 = -0x80000000000000000000000000000000;
-    int128 private constant MAX_64x64 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-    int128 private constant TEN_64x64 = 0xa0000000000000000;
+    int256 public constant DECIMALS = 10 ** 18;
+    int128 public constant ONE_64x64 = 2 ** 64;
+    int128 public constant MIN_64x64 = -0x80000000000000000000000000000000;
+    int128 public constant MAX_64x64 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+    int128 public constant TEN_64x64 = 0xa0000000000000000;
     event CallbackReceived(bytes32 orderDigest, bool isExecuted);
 
     /**

@@ -7,26 +7,36 @@ import {DiracPerpetualVault} from "../src/DiracPerpetualVault.sol";
 import {DiracPerpetualVaultUpgrade} from "../src/DiracPerpetualVaultUpgrade.sol";
 import "../src/interface/IAccountInfo.sol";
 import  "forge-std/console.sol";
+import {DiracPerpetualD8XVault} from "../src/DiracPerpetualD8XVault.sol";
 contract DeployDiracPerpetualVault is Script{
     IERC20 internal honey = IERC20(0xFCBD14DC51f0A4d49d5E53C2E0950e0bC26d0Dce); // HONEY
     address internal kodiakSwapRouter=0xEd158C4b336A6FCb5B193A5570e3a571f6cbe690; // Kodiak V3 SwapRouter
     address internal perpetualVault=0xb6329c7168b255Eca8e5c627b0CCe7A5289C8b7F;
-    address internal orderBookAddressBTC=0x901cA2D9a243aeeDB0e91495AfE27f97864F81F7;
-    address internal orderBookAddressGold=0x7A34951C84764D0337eA20942CFFe7692F8f6662;
     uint24  internal perpetualIdBTC = 100003; // BTC perpetual ID
-    uint24  internal perpetualIdGold = 100004; // Gold perpetual ID
-    function run() external {
+    uint24  internal perpetualIdGold = 100013; // Gold perpetual ID
+
+function run() external {
 
         // deployment
-        address  vault =0x42c79B19d9266c80e970383Bac68aa0a5E351C3E;
+        // address  vault =0x42c79B19d9266c80e970383Bac68aa0a5E351C3E; old contract
+        address  vault = 0xD47B1374E35Ddf8EaAe06bbe8EdC25B178Febe9b;
         //deploy();
-       // startTradeCycle(vault, 84000);
-        //postOrder(vault, 1 ether,  0x04000000, 1000, 105351 ether, true);
+        //startTradeCycle(vault, 84000);
+        postOrder(vault, 0, 100, 869322670006069  , true);
         //approveAmountForPerpetualMgnTkn(vault,1 ether, true);
         //upgrade(vault);
         //addPerpetual(vault, true);
         //addPerpetual(vault, false);
-        getMarginAccount(vault, true);
+        //getMarginAccount(vault, true);
+        //updateVariables( vault, IERC20(honey), kodiakSwapRouter, perpetualVault, perpetualIdBTC, perpetualIdGold, 50 ether);
+        //requestToEndTradeCycle(vault);
+        //endTradeCycle(vault);
+
+        //address[] memory whitelist = new address[](1);
+        //whitelist[0] = 0xC9104F69637C03D2646bF8225fcBb796C148D543;
+        //whitelistUsers(vault, whitelist, true);
+    //updateMaxDeposit(vault);
+        //deposit(vault,9 ether);
     }
 
     function setUp() external {
@@ -36,14 +46,12 @@ contract DeployDiracPerpetualVault is Script{
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
         address proxy = Upgrades.deployTransparentProxy(
-            "DiracPerpetualVault.sol",
+            "DiracPerpetualVaultUpgrade.sol",
             msg.sender,
             abi.encodeCall(
-                DiracPerpetualVault.initialize,
+                DiracPerpetualVaultUpgrade.initialize,
                 (
                     honey,
-                    orderBookAddressBTC,
-                    orderBookAddressGold,
                     kodiakSwapRouter,
                     perpetualVault,
                     perpetualIdBTC,
@@ -71,27 +79,40 @@ contract DeployDiracPerpetualVault is Script{
 
         vm.stopBroadcast();
     }
+    function updateVariables(
+
+        address vault,
+        IERC20 _honey,
+        address _kodiakSwapRouter,
+        address _perpetualVault,
+        uint24 _perpetualIdBTC,
+        uint24 _perpetualIdGold,
+        uint256 _maxUserDeposit
+    ) public {
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
+            payable(vault)
+        );
+        instance.updateVariables(
+            _honey,
+            _kodiakSwapRouter,
+            _perpetualVault,
+            _perpetualIdBTC,
+            _perpetualIdGold,
+            _maxUserDeposit
+        );
+        vm.stopBroadcast();
+    }
+
     function upgrade(address proxyAddress) public {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        bytes memory data = abi.encodeCall(
-            DiracPerpetualVaultUpgrade.updateVariables,
-            (
-                honey,
-                orderBookAddressBTC,
-                orderBookAddressGold,
-                kodiakSwapRouter,
-                perpetualVault,
-                perpetualIdBTC,
-                perpetualIdGold,
-                50 ether
-            )
-        );
 
         Upgrades.upgradeProxy(
             proxyAddress,
-            "DiracPerpetualVaultUpgrade.sol",
-            data
+            "DiracPerpetualD8XVault.sol",
+            ""
         );
         vm.stopBroadcast();
     }
@@ -108,6 +129,7 @@ contract DeployDiracPerpetualVault is Script{
 
         vm.stopBroadcast();
     }
+
 
     function addOperator(address vault, address newOperator) public {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
@@ -132,21 +154,6 @@ contract DeployDiracPerpetualVault is Script{
         vm.stopBroadcast();
     }
 
-    function whitelistUsers(
-        address vault,
-        address[] memory users,
-        bool status
-    ) public {
-        uint256 operatorPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        vm.startBroadcast(operatorPrivateKey);
-
-        DiracPerpetualVault instance = DiracPerpetualVault(
-            payable(vault)
-        );
-        instance.whitelistUsers(users, status);
-
-        vm.stopBroadcast();
-    }
 
     function updateMaxUserDeposit(address vault, uint256 newAmount) public {
         uint256 operatorPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
@@ -164,7 +171,7 @@ contract DeployDiracPerpetualVault is Script{
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
             payable(vault)
         );
         instance.startTradeCycle(duration);
@@ -196,14 +203,25 @@ contract DeployDiracPerpetualVault is Script{
     function deposit(address vault, uint256 amount) public {
         uint256 userPrivateKey = vm.envUint("USER_PRIVATE_KEY");
         address user = vm.addr(userPrivateKey);
+
         vm.startBroadcast(userPrivateKey);
 
         TransferHelper.safeApprove(address(honey), vault, amount);
 
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualD8XVault instance = DiracPerpetualD8XVault(vault);
+        instance.deposit(amount,user);
+        vm.stopBroadcast();
+    }
+
+    function updateMaxDeposit(address vault) public {
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+
+        vm.startBroadcast(deployerPrivateKey);
+
+        DiracPerpetualD8XVault instance = DiracPerpetualD8XVault(
             payable(vault)
         );
-        instance.deposit(amount, user);
+        instance.updateMaxUserDeposit(50 ether);
         vm.stopBroadcast();
     }
 
@@ -219,20 +237,20 @@ contract DeployDiracPerpetualVault is Script{
         vm.stopBroadcast();
     }
 
-    function postOrder(address vault, int128 _amount, uint32 _flags, uint16 _leverageTDR, int128 _fLimitPrice, bool _isLong) public {
+    function postOrder(address vault,  uint32 _flags, uint16 _leverageTDR, int128 _fTradeAmountABDK, bool _isLong) public {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
             payable(vault)
         );
-        instance.postOrder(_amount, _flags, _leverageTDR, _fLimitPrice, _isLong);
+        instance.postOrder(_flags,_leverageTDR  ,_fTradeAmountABDK,_isLong);
         vm.stopBroadcast();
     }
 
     function addPerpetual(address vault, bool isBTC) public{
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
             payable(vault)
         );
         instance.addPerpetual(isBTC);
@@ -242,7 +260,7 @@ contract DeployDiracPerpetualVault is Script{
     function approveAmountForPerpetualMgnTkn(address vault, uint256 _amount, bool isBTC) public{
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
             payable(vault)
         );
         instance.approveAmountForPerpetualMgnTkn(_amount, isBTC);
@@ -252,7 +270,7 @@ contract DeployDiracPerpetualVault is Script{
     function getMarginAccount(address vault, bool isBTC) public{
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
             payable(vault)
         );
         IAccountInfo.D18MarginAccount memory account = instance.getMarginAccount(isBTC);
@@ -265,7 +283,7 @@ contract DeployDiracPerpetualVault is Script{
     function transferMarginCollateralTo(address vault, bool isBTC) public{
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
             payable(vault)
         );
         instance.transferMarginCollateralTo(isBTC);
@@ -275,12 +293,26 @@ contract DeployDiracPerpetualVault is Script{
     function transferTokensTo(address vault, bool isBTC) public{
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
             payable(vault)
         );
         instance.transferMarginCollateralTo(isBTC);
         vm.stopBroadcast();
     }
 
+    function whitelistUsers(
+        address vault,
+        address[] memory users,
+        bool status
+    ) public {
+        uint256 operatorPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(operatorPrivateKey);
 
+        DiracPerpetualD8XVault instance = DiracPerpetualD8XVault(
+            payable(vault)
+        );
+        instance.whitelistUsers(users, status);
+
+        vm.stopBroadcast();
+    }
 }

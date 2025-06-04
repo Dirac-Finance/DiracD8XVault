@@ -23,9 +23,7 @@ import "./library/LOperation.sol";
 /**
  * @dev Custom errors.
  */
-    error ArrayOutOfBound();
     error InsufficientFunds();
-    error LiquidityNotAvailable();
     error OperationFailed();
     error TradeNotMatured();
     error UserExceedMaxDepositAmount();
@@ -35,7 +33,6 @@ import "./library/LOperation.sol";
     error PerpetualOrderSubmitFailed(string reason);
 
 /// @custom:oz-upgrades-from DiracPerpetualVault
-
 contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, AccessControlUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 
     // The trade cycle status
@@ -47,27 +44,23 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
     }
 
     // Data structures
-    struct goldPositionData {
+    struct PositionData {
         int128 amount;
         uint128 entryPrice;
         uint256 executedAt;
         uint256 postedAt;
+        uint32 _flags;
+        uint16 _leverageTDR;
+        int256 _fTradeAmountABDK;
     }
 
-    struct btcPositionData {
-        int128 amount;
-        uint128 entryPrice;
-        uint256 executedAt;
-        uint256 postedAt;
-    }
 
     struct TradeCycle {
         TradeCycleStatus status;
         uint256 startedAt;
         uint256 endedAt;
         uint256 honeyDeposit; // The amount of honey deposited at the start of the trade cycle
-        goldPositionData[] goldPositions;
-        btcPositionData[] btcPositions;
+        PositionData[] Positions;
     }
 
     // events that occurred
@@ -249,7 +242,7 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         uint24 _perpetualIdBTC,
         uint24 _perpetualIdGold,
         uint256 _maxUserDeposit
-    )external {
+    ) external {
         if (address(_honey) == address(0) ||  _perpetualProxy == address(0) ||  _kodiakSwapRouter == address(0)) {
             revert ZeroAddress();
         }
@@ -514,17 +507,15 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
     /**
      * @notice Posts an order for a specific perpetual.
      * @dev Only callable by an operator when the trade cycle status is OPEN.
-     * @param _amount The amount to post.
      * @param _flags Flags for the order.
      * @param _leverageTDR Leverage TDR for the order.
      * @param _fTradeAmountABDK The trade amount in ABDK format.
      * @param _isLong Whether the order is long or short.
      */
     function postOrder(
-        int256 _amount,
         uint32 _flags,
         uint16 _leverageTDR,
-        int256 _fTradeAmountABDK,
+        int128 _fTradeAmountABDK,
         bool _isLong
     ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant onlyTradeCycle(TradeCycleStatus.OPEN) {
         // This is for bit coin order
@@ -540,7 +531,7 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         order[0].iPerpetualId = _iPerpetualId;
         order[0].flags=_flags;
         order[0].traderAddr= address(this);
-        order[0].fAmount=_amount;
+        order[0].fAmount=_fTradeAmountABDK;
         order[0].fLimitPrice=_fTradeAmountABDK > 0 ? LOperation.MAX_64x64 : int128(0);
         order[0].leverageTDR=_leverageTDR; // 0 if deposit and trade separate
         order[0].iDeadline  =  uint32(block.timestamp + 86400 * 3);
@@ -549,26 +540,18 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         // order[0].callbackTarget = address(this);
         bytes[] memory sig = new bytes[](1);
         try ILimitOrderBook(orderBookAddr).postOrders(order , sig){
-            if(_isLong) {
-                tradeCycles[currentTradeCycleId].goldPositions.push(
-                    goldPositionData({
-                        amount: _amount,
+                tradeCycles[currentTradeCycleId].Positions.push(
+                    PositionData({
+                        amount: _fTradeAmountABDK,
                         entryPrice: uint128(order[0].fLimitPrice),
-                        executedAt: block.timestamp,
-                        postedAt: block.timestamp
+                        executedAt: 0,
+                        postedAt: block.timestamp,
+                        _flags : _flags,
+                        _leverageTDR : _leverageTDR,
+                        _fTradeAmountABDK : _fTradeAmountABDK
                     })
                 );
-            } else {
-                tradeCycles[currentTradeCycleId].btcPositions.push(
-                    btcPositionData({
-                        amount: _amount,
-                        entryPrice: uint128(order[0].fLimitPrice),
-                        executedAt: block.timestamp,
-                        postedAt: block.timestamp
-                    })
-                );
-            }
-            emit PostedOrder(_iPerpetualId, _amount, _flags, _leverageTDR, order[0].fLimitPrice);
+            emit PostedOrder(_iPerpetualId, _fTradeAmountABDK, _flags, _leverageTDR, order[0].fLimitPrice);
         } catch Error(string memory reason) {
             revert PerpetualOrderSubmitFailed(reason);
         }
