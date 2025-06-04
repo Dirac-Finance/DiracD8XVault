@@ -85,5 +85,23 @@ The logic contract can be upgraded without changing the proxy address, enabling 
 shifts while maintaining compatibility with integrators.
 
 
+The meeting schedule is about to end.
+Action Items for this meeting:
+- Present the first version of the code to the team for review and feedback. @Omar Roustoumi
+- Whitelist addresses for the initial investment period. @Caspar Sauter
+- Define the funding period for the product launch and liquidity lock. @Omar Roustoumi
+- Confirm the number of decimals used for the amount in the contract. @Dibea Koffi BADJO
+- Calculate the amount of base currency (Bitcoin or Gold) for the order size
+  based on user deposits. @Caspar Sauter
+- Confirm the type of order (market or limit) for the deployment made yesterday and ensure it works as intended. @Omar Roustoumi
+- Provide a script that has an input for the amount of honey in the world and creates a post order algorithm. @Basile Maire
+- Provide access to the contract for review. @Basile Maire
+- Add the necessary text to the GitHub repository. @Omar Roustoumi
+- Discuss and decide on the duration of the epoch for closing positions
+  to optimize yield. @Omar Roustoumi
+- Choose the leverage parameters for the integration strategy. @Basile Maire
+- Deploy a simple strategy for the integration that can be gradually improved over time. @Omar Roustoumi
+- Send GitHub handles to the team. @Caspar Sauter
+
 
 

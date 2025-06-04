@@ -32,6 +32,7 @@ import "./library/LOperation.sol";
     error UserNotWhitelisted();
     error ZeroAddress();
     error ZeroAmount();
+    error PerpetualOrderSubmitFailed(string reason);
 
 /// @custom:oz-upgrades-from DiracPerpetualVault
 
@@ -96,17 +97,12 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
 
     // D8X addresses for smart contract interaction  
     address private perpetualProxy;
-    address private orderBookAddressBTC;
-    address private orderBookAddressGold;
-
-    uint24 private  PERPETUAL_ID_BTC;
-    uint24 private  PERPETUAL_ID_GOLD;
 
     // perpetual id
     uint24 private   perpetualIdBTC;
     uint24 private   perpetualIdGold;
 
-    // Kodiak swap router address (in case we need to accept other currencies as deposits to be swapped to HONEY and sent to D8X/MadHoney)
+    // Kodiak swap router address (in case we need to accept other currencies as deposits to be swapped to HONEY and sent to D8X/MadHoney). In case we need to swap token
     address private  kodiakSwapRouter;
     // operator role for operations like deposits, withdrawals, and trades
     bytes32 private constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -219,8 +215,6 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
 
     function initialize(
         IERC20 _honey,
-        address _orderBookAddressBTC,
-        address _orderBookAddressGold,
         address _kodiakSwapRouter,
         address _perpetualProxy,
         uint24 _perpetualIdBTC,
@@ -236,37 +230,32 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(OPERATOR_ROLE, msg.sender);
 
-        if (address(_honey) == address(0) ||  _perpetualProxy == address(0) ||  _kodiakSwapRouter == address(0) ||  _orderBookAddressGold == address(0) ||  _orderBookAddressBTC == address(0)) {
+        if (address(_honey) == address(0) ||  _perpetualProxy == address(0) ||  _kodiakSwapRouter == address(0)) {
             revert ZeroAddress();
         }
         honey = _honey;
         perpetualProxy = _perpetualProxy;
         maxUserDeposit = _maxUserDeposit;
-        orderBookAddressBTC = _orderBookAddressBTC;
-        orderBookAddressGold = _orderBookAddressGold;
         kodiakSwapRouter = _kodiakSwapRouter;
         perpetualIdBTC = _perpetualIdBTC;
         perpetualIdGold = _perpetualIdGold;
     }
 
+    // In development this function is use to update some variables. In production it should be deleted
     function updateVariables(
         IERC20 _honey,
-        address _orderBookAddressBTC,
-        address _orderBookAddressGold,
         address _kodiakSwapRouter,
         address _perpetualProxy,
         uint24 _perpetualIdBTC,
         uint24 _perpetualIdGold,
         uint256 _maxUserDeposit
     )external {
-        if (address(_honey) == address(0) ||  _perpetualProxy == address(0) ||  _kodiakSwapRouter == address(0) ||  _orderBookAddressGold == address(0) ||  _orderBookAddressBTC == address(0)) {
+        if (address(_honey) == address(0) ||  _perpetualProxy == address(0) ||  _kodiakSwapRouter == address(0)) {
             revert ZeroAddress();
         }
         honey = _honey;
         perpetualProxy = _perpetualProxy;
         maxUserDeposit = _maxUserDeposit;
-        orderBookAddressBTC = _orderBookAddressBTC;
-        orderBookAddressGold = _orderBookAddressGold;
         kodiakSwapRouter = _kodiakSwapRouter;
         perpetualIdBTC = _perpetualIdBTC;
         perpetualIdGold = _perpetualIdGold;
@@ -414,12 +403,22 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         }
     }
 
+    /**
+     * @notice Requests to end the current trade cycle.
+     * @dev Only callable by the admin when the trade cycle status is OPEN and the contract is not paused.
+     */
     function requestToEndTradeCycle() external  onlyRole(DEFAULT_ADMIN_ROLE) onlyTradeCycle(TradeCycleStatus.OPEN) whenNotPaused{
         TradeCycle storage tradeCycle = tradeCycles[currentTradeCycleId];
         tradeCycle.status = TradeCycleStatus.PENDING;
 
         emit TradeCyclePendingEnd(currentTradeCycleId);
     }
+
+    /**
+     * @notice Ends the current trade cycle.
+     * @dev Only callable by the admin when the trade cycle status is PENDING and the contract is not paused.
+     */
+
     function endTradeCycle() external onlyRole(DEFAULT_ADMIN_ROLE) onlyTradeCycle(TradeCycleStatus.PENDING) whenNotPaused {
         TradeCycle storage tradeCycle = tradeCycles[currentTradeCycleId];
         tradeCycle.status = TradeCycleStatus.CLOSED;
@@ -427,10 +426,19 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         emit TradeCycleEnded(currentTradeCycleId, tradeCycle.endedAt);
     }
 
+    /**
+     * @notice Returns the total value locked (TVL) in the vault.
+     * @return The total value locked in the vault.
+     */
     function getTVL() external view returns (uint256) {
         return convertToAssets(totalSupply());
     }
 
+    /**
+     * @notice Adds a specific D8X perpetual Id in order to use it.
+     * @dev Only callable by an operator.
+     * @param isBTC Whether the perpetual is for BTC or Gold.
+     */
     function addPerpetual(bool isBTC) external onlyRole(OPERATOR_ROLE) {
         // set order book address
         address lobAddr;
@@ -459,7 +467,12 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         emit PerpetualAdded(_iPerpetualId, lobAddr, mgnTknAddrOfPool[poolId]);
     }
 
-
+    /**
+     * @notice Approves the margin token for a specific perpetual.
+     * @dev Only callable by an operator.
+     * @param _amount The amount to approve.
+     * @param isBTC Whether the perpetual is for BTC or Gold.
+     */
     function approveAmountForPerpetualMgnTkn(uint256 _amount, bool isBTC) external onlyRole(OPERATOR_ROLE){
         uint24 _iPerpetualId;
         if(isBTC){
@@ -498,12 +511,20 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         IERC20(_spendToken).approve(compositeToken, _amount);
     }
 
-
+    /**
+     * @notice Posts an order for a specific perpetual.
+     * @dev Only callable by an operator when the trade cycle status is OPEN.
+     * @param _amount The amount to post.
+     * @param _flags Flags for the order.
+     * @param _leverageTDR Leverage TDR for the order.
+     * @param _fTradeAmountABDK The trade amount in ABDK format.
+     * @param _isLong Whether the order is long or short.
+     */
     function postOrder(
-        int128 _amount,
+        int256 _amount,
         uint32 _flags,
         uint16 _leverageTDR,
-        int128 _fLimitPrice,
+        int256 _fTradeAmountABDK,
         bool _isLong
     ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant onlyTradeCycle(TradeCycleStatus.OPEN) {
         // This is for bit coin order
@@ -520,19 +541,19 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
         order[0].flags=_flags;
         order[0].traderAddr= address(this);
         order[0].fAmount=_amount;
-        order[0].fLimitPrice=_fLimitPrice;
+        order[0].fLimitPrice=_fTradeAmountABDK > 0 ? LOperation.MAX_64x64 : int128(0);
         order[0].leverageTDR=_leverageTDR; // 0 if deposit and trade separate
         order[0].iDeadline  =  uint32(block.timestamp + 86400 * 3);
         order[0].executionTimestamp  =  uint32(block.timestamp);
         // specify callback target
-        order[0].callbackTarget = address(this);
+        // order[0].callbackTarget = address(this);
         bytes[] memory sig = new bytes[](1);
-        try ILimitOrderBook(orderBookAddressBTC).postOrders(order , sig){
+        try ILimitOrderBook(orderBookAddr).postOrders(order , sig){
             if(_isLong) {
                 tradeCycles[currentTradeCycleId].goldPositions.push(
                     goldPositionData({
                         amount: _amount,
-                        entryPrice: uint128(_fLimitPrice),
+                        entryPrice: uint128(order[0].fLimitPrice),
                         executedAt: block.timestamp,
                         postedAt: block.timestamp
                     })
@@ -541,19 +562,26 @@ contract DiracPerpetualVaultUpgrade is Initializable, ERC4626Upgradeable, Access
                 tradeCycles[currentTradeCycleId].btcPositions.push(
                     btcPositionData({
                         amount: _amount,
-                        entryPrice: uint128(_fLimitPrice),
+                        entryPrice: uint128(order[0].fLimitPrice),
                         executedAt: block.timestamp,
                         postedAt: block.timestamp
                     })
                 );
             }
-            emit PostedOrder(_iPerpetualId, _amount, _flags, _leverageTDR, _fLimitPrice);
-        } catch {
-            revert OperationFailed();
+            emit PostedOrder(_iPerpetualId, _amount, _flags, _leverageTDR, order[0].fLimitPrice);
+        } catch Error(string memory reason) {
+            revert PerpetualOrderSubmitFailed(reason);
         }
     }
 
-
+    /**
+     * @notice Swaps tokens using the Kodiak swap router.
+     * @dev Only callable by an operator.
+     * @param _tokenIn The address of the token to swap from.
+     * @param _tokenOut The address of the token to swap to.
+     * @param _amountIn The amount of the input token to swap.
+     * @param _amountOutMin The minimum amount of the output token to receive.
+     */
     function swapToken(
         address _tokenIn,
         address _tokenOut,
