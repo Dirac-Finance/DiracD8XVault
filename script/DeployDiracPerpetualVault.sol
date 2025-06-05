@@ -22,7 +22,9 @@ function run() external {
         address  vault = 0xD47B1374E35Ddf8EaAe06bbe8EdC25B178Febe9b;
         //deploy();
         //startTradeCycle(vault, 84000);
-        postOrder(vault, 0, 100, 869322670006069  , true);
+        //approveCompositeToken(vault, 10 ether, perpetualIdBTC, address(honey));
+        //approveCompositeToken(vault, 5 ether, perpetualIdGold, address(honey));
+        //postOrder(vault,  0x40000000, 100,   1730808206853421, true);
         //approveAmountForPerpetualMgnTkn(vault,1 ether, true);
         //upgrade(vault);
         //addPerpetual(vault, true);
@@ -32,11 +34,33 @@ function run() external {
         //requestToEndTradeCycle(vault);
         //endTradeCycle(vault);
 
+        //// Process
+
+        // 2. Whitelist address finish
+
         //address[] memory whitelist = new address[](1);
         //whitelist[0] = 0xC9104F69637C03D2646bF8225fcBb796C148D543;
         //whitelistUsers(vault, whitelist, true);
-    //updateMaxDeposit(vault);
-        //deposit(vault,9 ether);
+        // 5 Allowance finish
+        //approveCompositeToken(vault, 15 ether, perpetualIdBTC, address(honey)); // 10 HONEY
+        //approveCompositeToken(vault, 15 ether, perpetualIdGold, address(honey)); // 5 HONEY
+        // 4 Start trade cycle finish
+        //startTradeCycle(vault, 84000); // 84000 seconds = 1 day
+        // 1. Initialization of the vault finish
+         // initialisation(vault);
+        // 3. make deposit finish
+
+        //deposit(vault, 15 ether, address(0xC9104F69637C03D2646bF8225fcBb796C148D543)); // 10 HONEY
+        // 6 open orders
+
+        // 7. get account informations
+
+        // 8. Close trade
+
+
+        //updateMaxDeposit(vault);
+        //addOperator(vault, 0x0A5980A4923388b9Bd4108b27e5bD65998deb6C7);
+        //transferOwnership(vault, 0x0A5980A4923388b9Bd4108b27e5bD65998deb6C7);
     }
 
     function setUp() external {
@@ -109,6 +133,19 @@ function run() external {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
+        /*bytes memory data = abi.encodeCall(
+        DiracPerpetualD8XVault.reinitializerV2,
+            (
+                honey,
+                kodiakSwapRouter,
+                perpetualVault,
+                perpetualIdBTC,
+                perpetualIdGold,
+                50 ether
+            )
+        );
+        */
+
         Upgrades.upgradeProxy(
             proxyAddress,
             "DiracPerpetualD8XVault.sol",
@@ -130,12 +167,21 @@ function run() external {
         vm.stopBroadcast();
     }
 
+    function initialisation(address vault) public {
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
 
+        DiracPerpetualD8XVault instance = DiracPerpetualD8XVault(
+            payable(vault)
+        );
+        instance.initializeCycle();
+        vm.stopBroadcast();
+    }
     function addOperator(address vault, address newOperator) public {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        DiracPerpetualVault instance = DiracPerpetualVault(
+        DiracPerpetualD8XVault instance = DiracPerpetualD8XVault(
             payable(vault)
         );
         instance.grantRole(keccak256("OPERATOR_ROLE"), newOperator);
@@ -153,7 +199,6 @@ function run() external {
 
         vm.stopBroadcast();
     }
-
 
     function updateMaxUserDeposit(address vault, uint256 newAmount) public {
         uint256 operatorPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
@@ -200,10 +245,11 @@ function run() external {
         vm.stopBroadcast();
     }
 
-    function deposit(address vault, uint256 amount) public {
+    function deposit(address vault, uint256 amount, address user) public {
         uint256 userPrivateKey = vm.envUint("USER_PRIVATE_KEY");
-        address user = vm.addr(userPrivateKey);
-
+        if (user == address(0)) {
+            user = vm.addr(userPrivateKey);
+        }
         vm.startBroadcast(userPrivateKey);
 
         TransferHelper.safeApprove(address(honey), vault, amount);
@@ -277,6 +323,21 @@ function run() external {
         console.log("lockedInValueQCD18: %s", account.lockedInValueQCD18);
         console.log("cashCCD18:         %s", account.cashCCD18);
         console.log("positionSizeBCD18: %s", account.positionSizeBCD18);
+        vm.stopBroadcast();
+    }
+
+    function approveCompositeToken(
+        address vault,
+        uint256 _amount,
+        uint24 _iPerpetualId,
+        address _spendToken
+    ) public {
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        DiracPerpetualD8XVault instance = DiracPerpetualD8XVault(
+            payable(vault)
+        );
+        instance.approveCompositeToken(_amount, _iPerpetualId, _spendToken);
         vm.stopBroadcast();
     }
 

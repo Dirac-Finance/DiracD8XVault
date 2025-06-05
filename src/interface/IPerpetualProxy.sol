@@ -24,4 +24,10 @@ interface IPerpetualProxy {
         uint24 _perpetualId,
         address _traderAddress
     ) external view returns (IAccountInfo.MarginAccount memory);
+
+    function executeCancelOrder(uint24 _perpetualId, bytes32 _digest) external;
+
+    function isOrderExecuted(bytes32 digest) external view returns (bool);
+
+    function isOrderCanceled(bytes32 digest) external view returns (bool);
 }
