@@ -24,7 +24,10 @@ function run() external {
         //startTradeCycle(vault, 84000);
         //approveCompositeToken(vault, 10 ether, perpetualIdBTC, address(honey));
         //approveCompositeToken(vault, 5 ether, perpetualIdGold, address(honey));
-        //postOrder(vault,  0x40000000, 100,   1730808206853421, true);
+        postOrder(vault,  0x40000000, 100,   -2643782670969535, 15, address(0xFCBD14DC51f0A4d49d5E53C2E0950e0bC26d0Dce), true );
+
+        postOrder(vault,  0x40000000, 100,   81716625573186580, 15, address(0xFCBD14DC51f0A4d49d5E53C2E0950e0bC26d0Dce), false );
+
         //approveAmountForPerpetualMgnTkn(vault,1 ether, true);
         //upgrade(vault);
         //addPerpetual(vault, true);
@@ -283,13 +286,13 @@ function run() external {
         vm.stopBroadcast();
     }
 
-    function postOrder(address vault,  uint32 _flags, uint16 _leverageTDR, int128 _fTradeAmountABDK, bool _isLong) public {
+    function postOrder(address vault,  uint32 _flags, uint16 _leverageTDR, int128 _fTradeAmountABDK, uint256 amount, address spendToken, bool _isLong) public {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        DiracPerpetualVaultUpgrade instance = DiracPerpetualVaultUpgrade(
+        DiracPerpetualD8XVault instance = DiracPerpetualD8XVault(
             payable(vault)
         );
-        instance.postOrder(_flags,_leverageTDR  ,_fTradeAmountABDK,_isLong);
+        instance.postOrder(_flags, _leverageTDR, _fTradeAmountABDK, amount, spendToken, _isLong);
         vm.stopBroadcast();
     }
 
@@ -326,7 +329,7 @@ function run() external {
         vm.stopBroadcast();
     }
 
-    function approveCompositeToken(
+   /* function approveCompositeToken(
         address vault,
         uint256 _amount,
         uint24 _iPerpetualId,
@@ -340,6 +343,7 @@ function run() external {
         instance.approveCompositeToken(_amount, _iPerpetualId, _spendToken);
         vm.stopBroadcast();
     }
+    */
 
     function transferMarginCollateralTo(address vault, bool isBTC) public{
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");

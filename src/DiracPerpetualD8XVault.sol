@@ -595,11 +595,11 @@ contract DiracPerpetualD8XVault is Initializable, ERC4626Upgradeable, AccessCont
      * @param _iPerpetualId perpetual Id
      * @param _spendToken Token to spend
      */
-    function approveCompositeToken(
+    function _approveCompositeToken(
         uint256 _amount,
         uint24 _iPerpetualId,
         address _spendToken
-    ) external onlyRole(OPERATOR_ROLE) {
+    ) internal onlyRole(OPERATOR_ROLE) {
         uint8 poolId = uint8(_iPerpetualId / 100_000);
         address compositeToken = mgnTknAddrOfPool[poolId];
         require(compositeToken != address(0), "no composite");
@@ -622,12 +622,14 @@ contract DiracPerpetualD8XVault is Initializable, ERC4626Upgradeable, AccessCont
      * @param _fTradeAmountABDK The trade amount in ABDK format.
      * @param _isLong Whether the order is long or short.
      */
-    function _postOrder(
+    function postOrder(
         uint32 _flags,
         uint16 _leverageTDR,
         int128 _fTradeAmountABDK,
+        uint256 _amount,
+        address _spendToken,
         bool _isLong
-    ) internal {
+    ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant onlyTradeCycle(TradeCycleStatus.OPEN) {
         // This is for bit coin order
         uint24 _iPerpetualId;
         IClientOrder.ClientOrder[] memory order = new IClientOrder.ClientOrder[](1);
@@ -638,6 +640,7 @@ contract DiracPerpetualD8XVault is Initializable, ERC4626Upgradeable, AccessCont
         }
         address orderBookAddr = orderBookAddresses[_iPerpetualId];
         require(orderBookAddr != address(0), "order book unknown");
+        _approveCompositeToken(_amount, _iPerpetualId, _spendToken);
         order[0].iPerpetualId = _iPerpetualId;
         order[0].flags=_flags == 0 ? 0x04000000 : _flags; // 0x04000000 is the default flag for a limit order
         order[0].traderAddr= address(this);
@@ -667,18 +670,22 @@ contract DiracPerpetualD8XVault is Initializable, ERC4626Upgradeable, AccessCont
         }
     }
 
-    function postOrder(
+   /* function postOrders(
         uint32 _flags,
         uint16 _leverageTDR,
         int128 _fTradeAmountABDK,
+        uint256 _amount,
+        address _spendToken,
         uint32 _flagsGold,
         uint16 _leverageTDRGold,
-        int128 _fTradeAmountABDKGold
+        int128 _fTradeAmountABDKGold,
+        uint256 _amountGold,
+        address _spendTokenGold
     ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant onlyTradeCycle(TradeCycleStatus.OPEN){
-        _postOrder(_flags, _leverageTDR,_fTradeAmountABDK, true);
-        _postOrder(_flagsGold, _leverageTDRGold, _fTradeAmountABDKGold, false);
+        postOrder(_flags, _leverageTDR,_fTradeAmountABDK, true);
+        postOrder(_flagsGold, _leverageTDRGold, _fTradeAmountABDKGold, false);
     }
-
+    */
     /*
     function getPositionData(
         bytes32 _digest
@@ -803,7 +810,7 @@ contract DiracPerpetualD8XVault is Initializable, ERC4626Upgradeable, AccessCont
         // transfer the margin token to the user
         TransferHelper.safeTransfer(
             _tokenAddr,
-            address(this),
+            msg.sender,
             balance
         );
         //token.safeTransfer(msg.sender, balance);
