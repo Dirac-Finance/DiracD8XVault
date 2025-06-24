@@ -288,6 +288,7 @@ contract DiracPerpetualD8XVault2 is Initializable, ERC4626Upgradeable, AccessCon
         kodiakSwapRouter = _kodiakSwapRouter;
         perpetualIdBTC = _perpetualIdBTC;
         perpetualIdGold = _perpetualIdGold;
+
     }
 
 
@@ -594,11 +595,11 @@ contract DiracPerpetualD8XVault2 is Initializable, ERC4626Upgradeable, AccessCon
      * @param _iPerpetualId perpetual Id
      * @param _spendToken Token to spend
      */
-    function _approveCompositeToken(
+    function approveCompositeToken(
         uint256 _amount,
         uint24 _iPerpetualId,
         address _spendToken
-    ) internal onlyRole(OPERATOR_ROLE) {
+    ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant onlyTradeCycle(TradeCycleStatus.OPEN) {
         uint8 poolId = uint8(_iPerpetualId / 100_000);
         address compositeToken = mgnTknAddrOfPool[poolId];
         require(compositeToken != address(0), "no composite");
@@ -626,7 +627,6 @@ contract DiracPerpetualD8XVault2 is Initializable, ERC4626Upgradeable, AccessCon
         uint16 _leverageTDR,
         int128 _fTradeAmountABDK,
         uint256 _amount,
-        address _spendToken,
         bool _isLong
     ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant onlyTradeCycle(TradeCycleStatus.OPEN) {
         // This is for bit coin order
@@ -639,7 +639,6 @@ contract DiracPerpetualD8XVault2 is Initializable, ERC4626Upgradeable, AccessCon
         }
         address orderBookAddr = orderBookAddresses[_iPerpetualId];
         require(orderBookAddr != address(0), "order book unknown");
-        _approveCompositeToken(_amount, _iPerpetualId, _spendToken);
         order[0].iPerpetualId = _iPerpetualId;
         order[0].flags=_flags == 0 ? 0x04000000 : _flags; // 0x04000000 is the default flag for a limit order
         order[0].traderAddr= address(this);
@@ -669,36 +668,36 @@ contract DiracPerpetualD8XVault2 is Initializable, ERC4626Upgradeable, AccessCon
         }
     }
 
-    /* function postOrders(
+    /*function postOrders(
          uint32 _flags,
          uint16 _leverageTDR,
          int128 _fTradeAmountABDK,
          uint256 _amount,
-         address _spendToken,
+         bool isWithdrawal,
          uint32 _flagsGold,
          uint16 _leverageTDRGold,
          int128 _fTradeAmountABDKGold,
-         uint256 _amountGold,
-         address _spendTokenGold
+         uint256 _amountGold
      ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant onlyTradeCycle(TradeCycleStatus.OPEN){
-         postOrder(_flags, _leverageTDR,_fTradeAmountABDK, true);
-         postOrder(_flagsGold, _leverageTDRGold, _fTradeAmountABDKGold, false);
+         _postOrder(_flags, _leverageTDR,_fTradeAmountABDK, _amount, false, isWithdrawal);
+         _postOrder(_flagsGold, _leverageTDRGold, _fTradeAmountABDKGold, _amountGold, true, isWithdrawal);
+     }
+     /*
+
+     /*
+     function getPositionData(
+         bytes32 _digest
+     ) external view returns (PositionData memory) {
+         TradeCycle storage tradeCycle = tradeCycles[currentTradeCycleId];
+         bool isOrderExecuted = IPerpetualProxy(perpetualProxy).isOrderExecuted(_digest);
+         if(isOrderExecuted){
+
+         }
+         return tradeCycle.Positions.push(
+
+         );
      }
      */
-    /*
-    function getPositionData(
-        bytes32 _digest
-    ) external view returns (PositionData memory) {
-        TradeCycle storage tradeCycle = tradeCycles[currentTradeCycleId];
-        bool isOrderExecuted = IPerpetualProxy(perpetualProxy).isOrderExecuted(_digest);
-        if(isOrderExecuted){
-
-        }
-        return tradeCycle.Positions.push(
-
-        );
-    }
-    */
     /**
      * @notice Swaps tokens using the Kodiak swap router.
      * @dev Only callable by an operator.
@@ -827,5 +826,4 @@ contract DiracPerpetualD8XVault2 is Initializable, ERC4626Upgradeable, AccessCon
     }
     */
 }
-
 
