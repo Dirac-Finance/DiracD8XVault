@@ -455,13 +455,7 @@ contract DiracD8XLongGoldVault is Initializable, ERC4626Upgradeable, AccessContr
         emit TradeCycleEnded(currentTradeCycleId, tradeCycle.endedAt);
     }
 
-    /**
-     * @notice Returns the total value locked (TVL) in the vault.
-     * @return The total value locked in the vault.
-     */
-    function getTVL() external view returns (uint256) {
-        return convertToAssets(totalSupply());
-    }
+
 
     /**
      * @notice Adds a specific D8X perpetual Id in order to use it.
@@ -610,48 +604,7 @@ contract DiracD8XLongGoldVault is Initializable, ERC4626Upgradeable, AccessContr
     }
 
 
-    /**
-   * Withdraw margin token balance linked to a given perpetual Id
-   * @param isBTC whether the perpetual is BTC or Gold
-     */
-    function transferMarginCollateralTo(bool isBTC) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        uint24 _iPerpetualId;
-        if(isBTC){
-            _iPerpetualId = perpetualIdBTC;
-        }else{
-            _iPerpetualId = perpetualIdGold;
-        }
-        uint8 poolId = uint8(_iPerpetualId / 100_000);
-        address mgnTknAddr = mgnTknAddrOfPool[poolId];
-        IERC20 marginToken = IERC20(mgnTknAddr);
-        uint256 balance = marginToken.balanceOf(address(this));
-        // transfer the margin token to the user
-        TransferHelper.safeTransfer(
-            mgnTknAddr,
-            address(this),
-            balance
-        );
-        //marginToken.safeTransfer(msg.sender, balance);
-        emit MarginTokenSent(_iPerpetualId, msg.sender, balance);
-    }
 
-    /**
-     * Withdraw ERC20 tokens stored in this contract
-     * Required with trading in a pool with a composite token
-     * @param _tokenAddr Token address
-     */
-    function transferTokensTo(address _tokenAddr) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        IERC20 token = IERC20(_tokenAddr);
-        uint256 balance = token.balanceOf(address(this));
-        // transfer the margin token to the user
-        TransferHelper.safeTransfer(
-            _tokenAddr,
-            msg.sender,
-            balance
-        );
-        //token.safeTransfer(msg.sender, balance);
-        emit MarginTokenSent(0, msg.sender, balance);
-    }
 
 }
 

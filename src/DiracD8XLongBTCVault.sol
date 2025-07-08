@@ -44,8 +44,6 @@ contract DiracD8XLongBTCVault is Initializable, ERC4626Upgradeable, AccessContro
         CLOSED
     }
 
-
-
     // Trading cycle
     struct TradeCycle {
         TradeCycleStatus status;// The status of the trade cycle
@@ -276,44 +274,7 @@ contract DiracD8XLongBTCVault is Initializable, ERC4626Upgradeable, AccessContro
     }
 
 
-    /**
-     * @notice Reinitializes the contract to version 2.
-     * @dev Callable only once during deployment or upgrade.
-     * @param _honey The address of the HONEY token.
-     * @param _kodiakSwapRouter The address of the Kodiak swap router.
-     * @param _perpetualProxy The address of the D8X perpetual proxy.
-     * @param _perpetualIdBTC The perpetual ID for BTC.
-     * @param _perpetualIdGold The perpetual ID for Gold.
-     * @param _maxUserDeposit The maximum deposit amount per user.
-     */
-    function reinitializerV2(
-        IERC20 _honey,
-        address _kodiakSwapRouter,
-        address _perpetualProxy,
-        uint24 _perpetualIdBTC,
-        uint24 _perpetualIdGold,
-        uint256 _maxUserDeposit
-    ) public reinitializer(2) {
-        __ERC20_init("Dirac D8X Perpetual Vaults", "DDPV");
-        __ERC4626_init(_honey);
-        __AccessControl_init();
-        __Pausable_init();
-        __ReentrancyGuard_init();
 
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(OPERATOR_ROLE, msg.sender);
-
-        if (address(_honey) == address(0) ||  _perpetualProxy == address(0) ||  _kodiakSwapRouter == address(0)) {
-            revert ZeroAddress();
-        }
-        honey = _honey;
-        perpetualProxy = _perpetualProxy;
-        maxUserDeposit = _maxUserDeposit;
-        kodiakSwapRouter = _kodiakSwapRouter;
-        perpetualIdBTC = _perpetualIdBTC;
-        perpetualIdGold = _perpetualIdGold;
-        totalTVL = 0;
-    }
 
     /**
     * @notice Deposits assets and mints corresponding shares.
@@ -625,50 +586,6 @@ contract DiracD8XLongBTCVault is Initializable, ERC4626Upgradeable, AccessContro
             sqrtPriceLimitX96: 0
         });
         ISwapRouter(kodiakSwapRouter).exactInputSingle(swapParams);
-    }
-
-
-    /**
-   * Withdraw margin token balance linked to a given perpetual Id
-   * @param isBTC whether the perpetual is BTC or Gold
-     */
-    function transferMarginCollateralTo(bool isBTC) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        uint24 _iPerpetualId;
-        if(isBTC){
-            _iPerpetualId = perpetualIdBTC;
-        }else{
-            _iPerpetualId = perpetualIdGold;
-        }
-        uint8 poolId = uint8(_iPerpetualId / 100_000);
-        address mgnTknAddr = mgnTknAddrOfPool[poolId];
-        IERC20 marginToken = IERC20(mgnTknAddr);
-        uint256 balance = marginToken.balanceOf(address(this));
-        // transfer the margin token to the user
-        TransferHelper.safeTransfer(
-            mgnTknAddr,
-            address(this),
-            balance
-        );
-        //marginToken.safeTransfer(msg.sender, balance);
-        emit MarginTokenSent(_iPerpetualId, msg.sender, balance);
-    }
-
-    /**
-     * Withdraw ERC20 tokens stored in this contract
-     * Required with trading in a pool with a composite token
-     * @param _tokenAddr Token address
-     */
-    function transferTokensTo(address _tokenAddr) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        IERC20 token = IERC20(_tokenAddr);
-        uint256 balance = token.balanceOf(address(this));
-        // transfer the margin token to the user
-        TransferHelper.safeTransfer(
-            _tokenAddr,
-            msg.sender,
-            balance
-        );
-        //token.safeTransfer(msg.sender, balance);
-        emit MarginTokenSent(0, msg.sender, balance);
     }
 
 }
